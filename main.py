@@ -1,80 +1,58 @@
 import streamlit as st
-import random
+import pandas as pd
+import altair as alt
+import os
 
-# --------------------
-# 데이터: MBTI별 책 추천
-# --------------------
-book_recommendations = {
-    "INTJ": [
-        ("니코마코스 윤리학", "아리스토텔레스"),
-        ("총, 균, 쇠", "재레드 다이아몬드"),
-        ("사피엔스", "유발 하라리"),
-    ],
-    "ENTP": [
-        ("돈키호테", "세르반테스"),
-        ("넛셸", "이언 매큐언"),
-        ("원더", "R.J. 팔라시오"),
-    ],
-    "INFJ": [
-        ("데미안", "헤르만 헤세"),
-        ("연금술사", "파울로 코엘료"),
-        ("작은 것들의 신", "아룬다티 로이"),
-    ],
-    "ENFP": [
-        ("오만과 편견", "제인 오스틴"),
-        ("모모", "미하엘 엔데"),
-        ("지구 끝의 온실", "김초엽"),
-    ],
-    # 다른 유형들도 다양하게 추가
-    "ISTJ": [
-        ("군주론", "마키아벨리"),
-        ("자유론", "존 스튜어트 밀"),
-        ("팩트풀니스", "한스 로슬링"),
-    ],
-    "ISFP": [
-        ("월든", "헨리 데이비드 소로"),
-        ("채식주의자", "한강"),
-        ("파친코", "이민진"),
-    ],
-    "ENTJ": [
-        ("손자병법", "손자"),
-        ("제국", "닐 퍼거슨"),
-        ("넛셸", "이언 매큐언"),
-    ],
-    "INFP": [
-        ("어린 왕자", "생텍쥐페리"),
-        ("종이 여자", "기욤 뮈소"),
-        ("보건교사 안은영", "정세랑"),
-    ],
-}
+st.title("MBTI 유형별 비율이 가장 높은 국가 Top10")
 
-# --------------------
-# Streamlit UI
-# --------------------
+# 기본 파일 경로
+default_file = "countriesMBTI_16types.csv"
 
-st.set_page_config(page_title="MBTI 📖 Book Recommender", page_icon="📚", layout="centered")
+# 파일 불러오기 시도
+df = None
+if os.path.exists(default_file):
+    st.success(f"기본 파일을 불러왔습니다: {default_file}")
+    df = pd.read_csv(default_file)
+else:
+    uploaded_file = st.file_uploader("CSV 파일 업로드", type=["csv"])
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
 
-st.title("✨ MBTI로 보는 인생 책 추천 ✨")
-st.markdown("#### 당신의 MBTI를 선택하면, 딱 어울리는 책을 추천해드려요! 🚀")
+if df is not None:
+    # MBTI 타입 리스트
+    mbti_types = ["ISTJ","ISFJ","INFJ","INTJ","ISTP","ISFP","INFP","INTP",
+                  "ESTP","ESFP","ENFP","ENTP","ESTJ","ESFJ","ENFJ","ENTJ"]
 
-# MBTI 선택
-mbti = st.selectbox("당신의 MBTI를 골라주세요 😎", options=sorted(book_recommendations.keys()))
+    # 국가별 합계 계산
+    df["Total"] = df[mbti_types].sum(axis=1)
 
-if mbti:
-    st.markdown(f"### 당신은 **{mbti}** 타입이군요! 🌟")
+    # 국가별 MBTI 비율 계산
+    for t in mbti_types:
+        df[f"{t}_ratio"] = df[t] / df["Total"]
 
-    # 랜덤으로 책 하나 추천
-    book, author = random.choice(book_recommendations[mbti])
+    # 선택 박스: MBTI 유형 선택
+    selected_type = st.selectbox("MBTI 유형 선택", mbti_types)
 
-    st.success(f"{mbti} 타입에게 어울리는 책은... 🎉")
+    # 선택한 유형의 비율 기준 Top10 국가 추출
+    top10 = df[["Country", f"{selected_type}_ratio"]].sort_values(
+        by=f"{selected_type}_ratio", ascending=False
+    ).head(10)
 
-    st.markdown(
-        f"## 📖 *{book}*  \\\n        ✍️ {author}  \\\n        👉 지금 바로 읽어보세요! 🚀✨"
+    # Altair 차트
+    chart = (
+        alt.Chart(top10)
+        .mark_bar()
+        .encode(
+            x=alt.X(f"{selected_type}_ratio:Q", title="비율"),
+            y=alt.Y("Country:N", sort="-x"),
+            tooltip=["Country", f"{selected_type}_ratio"]
+        )
+        .interactive()
     )
 
-    # 재미있는 효과 (풍선, 눈뽕)
-    st.balloons()
+    st.altair_chart(chart, use_container_width=True)
 
-    if st.button("✨ 다른 책도 추천받기 ✨"):
-        book, author = random.choice(book_recommendations[mbti])
-        st.info(f"이번에는 📖 *{book}* (✍️ {author}) 어때요? 😍")
+    # 데이터 표도 함께 표시
+    st.dataframe(top10.reset_index(drop=True))
+else:
+    st.warning("기본 파일이 없으면 CSV를 업로드해주세요.")
